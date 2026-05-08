@@ -102,6 +102,52 @@ locals {
 }
 ```
 
+### Call flow
+
+A typical end-to-end VPC sizing run, from Terraform plan to applied
+allocations. Each `/v1/*` call is independent &mdash; the caller owns
+the ledger between requests.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor TF as Terraform / curl
+    participant API as FastAPI<br/>routes.py /v1
+    participant Models as Pydantic<br/>models.py
+    participant Core as core.py<br/>(pure)
+    participant Alloc as allocator.py<br/>(pure)
+    participant Std as stdlib<br/>ipaddress
+
+    TF->>API: POST /v1/free<br/>{parent, allocated}
+    API->>Models: validate FreeRequest
+    Models-->>API: IPv4Network, [IPv4Network]
+    API->>Core: free_blocks(parent, allocated)
+    Core->>Std: address_exclude / collapse_addresses
+    Std-->>Core: aligned blocks
+    Core-->>API: [IPv4Network]
+    API-->>TF: 200 {parent, allocated, free, utilization}
+
+    Note over TF: pick gaps, build VLSM<br/>requests for the next pass
+
+    TF->>API: POST /v1/allocate<br/>{parent, allocated, requests}
+    API->>Models: validate AllocateRequest
+    Models-->>API: typed inputs
+    API->>Alloc: allocate_vlsm(parent, allocated, requests)
+    Alloc->>Core: free_blocks(parent, allocated)
+    Core-->>Alloc: free pool
+    Alloc->>Core: subdivide(...) for each best-fit pick
+    Core-->>Alloc: split children
+    Alloc-->>API: AllocationResult
+    API-->>TF: 200 {assigned, unassigned, free_after}
+
+    Note over TF: persist assigned<br/>in module outputs
+
+    TF->>API: POST /v1/overlap<br/>{cidrs: [...all subnets...]}
+    API->>Core: overlap_pairs / summarize
+    Core-->>API: pairs + summary
+    API-->>TF: 200 {overlaps: [], summarized}
+```
+
 ## Layout
 
 ```text

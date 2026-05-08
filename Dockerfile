@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- deps: resolve and install third-party deps into /app/.venv ----
-FROM python:3.12-slim AS deps
+FROM python:3.14-slim AS deps
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 WORKDIR /app
 ENV UV_LINK_MODE=copy \
@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev
 
 # ---- runtime: minimal image, non-root, healthcheck, uvicorn on 8000 ----
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 WORKDIR /app
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \

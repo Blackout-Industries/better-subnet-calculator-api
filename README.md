@@ -3,7 +3,6 @@
 [![Build and publish](https://github.com/Blackout-Industries/better-subnet-calculator-api/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Blackout-Industries/better-subnet-calculator-api/actions/workflows/docker-publish.yml)
 [![CodeQL](https://github.com/Blackout-Industries/better-subnet-calculator-api/actions/workflows/codeql.yml/badge.svg)](https://github.com/Blackout-Industries/better-subnet-calculator-api/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Blackout-Industries/better-subnet-calculator-api/badge)](https://scorecard.dev/viewer/?uri=github.com/Blackout-Industries/better-subnet-calculator-api)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/0/badge)](https://www.bestpractices.dev/projects/0)
 [![SLSA Level 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 

@@ -31,14 +31,41 @@ Container images are:
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 
-- Embedded with SLSA build provenance via `docker buildx`'s
-  `provenance: true`. Inspect with `docker buildx imagetools inspect`.
-- Scanned with Trivy on every push to `main`. The publish job fails on
-  any critical or high severity finding with a fix available, so
-  vulnerable images never reach `latest`.
+- Accompanied by a SLSA v1 build provenance attestation, viewable on
+  the package page or via:
 
-GitHub Advanced Security features (CodeQL, Dependency Review, build
-attestations published via the GitHub API, the Security tab SARIF feed,
-OpenSSF Scorecard) are not enabled while this repository is private on
-a free plan. They will start working automatically if the repository
-becomes public or the organization upgrades.
+  ```sh
+  gh attestation verify oci://ghcr.io/blackout-industries/better-subnet-calculator-api:latest \
+    -R Blackout-Industries/better-subnet-calculator-api
+  ```
+
+- Embedded with a SBOM via Buildx `sbom: true`. Inspect with:
+
+  ```sh
+  docker buildx imagetools inspect \
+    ghcr.io/blackout-industries/better-subnet-calculator-api:latest \
+    --format '{{ json .SBOM }}'
+  ```
+
+- Scanned with Trivy on every push to `main`. Results are uploaded to
+  the GitHub Security tab as SARIF; the publish run also fails on any
+  HIGH or CRITICAL finding with a fix available, so vulnerable images
+  never reach `latest`.
+
+## Static analysis
+
+- **CodeQL** runs on every push, every pull request, and weekly. Findings
+  appear in the Security tab.
+- **Dependency Review** gates pull requests, blocking any new direct or
+  transitive dependency with a HIGH or CRITICAL advisory.
+- **OpenSSF Scorecard** runs weekly, results in SARIF + the public
+  Scorecard badge in `README.md`.
+- **GitHub secret scanning** + **push protection** are enabled on the
+  repository.
+
+## Runtime hardening
+
+GitHub Actions workflows use
+[step-security/harden-runner](https://github.com/step-security/harden-runner)
+in audit mode at the start of every job, monitoring runner egress
+endpoints. Findings are visible at <https://app.stepsecurity.io>.

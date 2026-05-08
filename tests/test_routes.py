@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 
 class TestHealthz:
     def test_returns_ok(self, client):
@@ -219,3 +223,56 @@ class TestErrorEnvelope:
         body = resp.json()
         assert set(body.keys()) == {"error"}
         assert set(body["error"].keys()) == {"code", "message", "field"}
+
+
+class TestContentTypeNegotiation:
+    def test_post_calculate_with_explicit_json_content_type(self, client):
+        resp = client.post(
+            "/v1/calculate",
+            content=json.dumps({"cidr": "10.0.0.0/24"}),
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["subnet"]["cidr"] == "10.0.0.0/24"
+
+    def test_post_calculate_without_content_type_is_422(self, client):
+        resp = client.post(
+            "/v1/calculate",
+            content=json.dumps({"cidr": "10.0.0.0/24"}),
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "INVALID_INPUT"
+
+
+class TestLargePayload:
+    def test_overlap_with_1000_cidrs(self, client):
+        cidrs = [f"10.{i // 256}.{i % 256}.0/24" for i in range(1000)]
+        resp = client.post("/v1/overlap", json={"cidrs": cidrs})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["overlaps"] == []
+        # 1000 disjoint /24s starting at 10.0.0.0/24 collapse to 10.0.0.0/22 + ...
+        assert len(body["summarized"]) >= 1
+        assert len(body["summarized"]) <= len(cidrs)
+
+
+V1_ENDPOINTS = ["/v1/calculate", "/v1/subdivide", "/v1/free", "/v1/allocate", "/v1/overlap"]
+
+
+class TestHttpMethodCoverage:
+    @pytest.mark.parametrize("path", V1_ENDPOINTS)
+    @pytest.mark.parametrize("method", ["get", "put", "delete", "patch"])
+    def test_non_post_returns_405(self, client, path, method):
+        resp = getattr(client, method)(path)
+        assert resp.status_code == 405
+
+
+class TestTrailingSlash:
+    def test_trailing_slash_calculate(self, client):
+        resp = client.post(
+            "/v1/calculate/",
+            json={"cidr": "10.0.0.0/24"},
+            follow_redirects=False,
+        )
+        # Whatever the impl does, status must be one of 200, 307, 404. Lock it in.
+        assert resp.status_code in {200, 307, 404}

@@ -1,0 +1,15 @@
+mode: ContinuousDelivery
+next-version: 0.1.0
+branches:
+  main:
+    label: ''
+    increment: Patch
+    regex: ^master$|^main$
+    source-branches: []
+    is-source-branch-for: []
+  pull-request:
+    label: ''
+    increment: Inherit
+ignore:
+  sha: []
+commit-message-incrementing: Enabled

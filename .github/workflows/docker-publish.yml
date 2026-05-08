@@ -1,0 +1,198 @@
+name: Build and publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Test and validate build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Run pytest
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build runtime image (amd64 only, no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish:
+    name: Publish multi-arch image to GHCR
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+
+    outputs:
+      version: ${{ steps.tags.outputs.version }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v3.0.3
+        with:
+          versionSpec: '6.0.x'
+
+      - name: Determine version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3.0.3
+        with:
+          useConfigFile: true
+          configFilePath: GitVersion.yml
+
+      - name: Lowercase image name
+        id: image
+        run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          REPO="${{ env.REGISTRY }}/${{ steps.image.outputs.name }}"
+          V="${{ steps.gitversion.outputs.majorMinorPatch }}"
+          MAJOR="${{ steps.gitversion.outputs.major }}"
+          MAJORMINOR="${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
+          TAGS="${REPO}:${V},${REPO}:${MAJORMINOR},${REPO}:${MAJOR},${REPO}:latest"
+          {
+            echo "tags=${TAGS}"
+            echo "version=${V}"
+            echo "repo=${REPO}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=better-subnet-calculator-api
+            org.opencontainers.image.description=FastAPI backend for the better-subnet-calculator
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign image with cosign (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          REPO: ${{ steps.tags.outputs.repo }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REPO}@${DIGEST}"
+
+      - name: Generate build attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Tag git commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="v${{ steps.tags.outputs.version }}"
+          if gh api "repos/${{ github.repository }}/git/refs/tags/${V}" >/dev/null 2>&1; then
+            echo "Tag ${V} already exists, skipping"
+          else
+            gh api "repos/${{ github.repository }}/git/refs" \
+              -X POST \
+              -f ref="refs/tags/${V}" \
+              -f sha="${{ github.sha }}"
+            echo "Created tag ${V}"
+          fi
+
+  scan:
+    name: Trivy vulnerability scan
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - name: Lowercase image name
+        id: image
+        run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Trivy on the published image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}@${{ needs.publish.outputs.image-digest }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image

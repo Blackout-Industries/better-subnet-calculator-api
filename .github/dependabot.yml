@@ -1,0 +1,44 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+    groups:
+      fastapi:
+        patterns: [fastapi, pydantic, "pydantic-*", uvicorn, starlette]
+      test:
+        patterns: ["pytest*", httpx, coverage]
+      lint:
+        patterns: [ruff, mypy]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, github-actions]
+    ignore:
+      # gittools/actions v4 emits a BOM-prefixed JSON that the runner JSON parser rejects.
+      # We pin v3 (currently v3.0.3); re-evaluate when GitTools fixes upstream.
+      - dependency-name: gittools/actions
+        update-types: [version-update:semver-major]
+    groups:
+      docker-actions:
+        patterns: [docker/*]
+      gittools:
+        patterns: [gittools/*]
+      codeql:
+        patterns: [github/codeql-action]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]

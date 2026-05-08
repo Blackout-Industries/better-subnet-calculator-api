@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs
+*.log
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Assistant artifacts
+.claude/
+.claude.json
+CLAUDE.md
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.windsurf/
+.codeium/
+.openhands/
+**/MEMORY.md

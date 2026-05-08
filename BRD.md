@@ -275,6 +275,50 @@ handler without rewriting it.
 - `routes.py` is thin: parse Pydantic input, call core/allocator,
   shape the response model. No business logic here.
 
+```mermaid
+flowchart LR
+    subgraph Caller["External caller"]
+      TF["Terraform / OpenTofu / Pulumi / curl"]
+    end
+
+    subgraph HTTP["HTTP / Pydantic glue"]
+      direction TB
+      Main["main.py<br/>FastAPI app + handlers"]
+      Routes["routes.py<br/>/v1/*"]
+      Models["models.py<br/>Pydantic v2"]
+      Errors["errors.py<br/>APIError envelope"]
+    end
+
+    subgraph Pure["Pure layer (no FastAPI imports)"]
+      direction TB
+      Core["core.py<br/>subnet_info<br/>subdivide<br/>free_blocks<br/>overlap_pairs<br/>summarize"]
+      Alloc["allocator.py<br/>allocate_vlsm<br/>(best-fit decreasing)"]
+    end
+
+    Std["stdlib<br/>ipaddress"]
+
+    TF -->|"HTTP POST /v1/*"| Main
+    Main --> Routes
+    Routes -->|"validate input"| Models
+    Models -->|"IPv4Network"| Routes
+    Routes -->|"call"| Core
+    Routes -->|"call"| Alloc
+    Alloc -->|"reuse"| Core
+    Core --> Std
+    Core -->|"dict / list"| Routes
+    Alloc -->|"AllocationResult"| Routes
+    Routes -->|"response_model"| Models
+    Models -->|"JSON"| Main
+    Main -->|"HTTP 2xx / 4xx"| TF
+    Routes -. "raise APIError" .-> Errors
+    Errors -->|"4xx envelope"| Main
+```
+
+The arrows in the pure layer are unidirectional: nothing in `core.py`
+or `allocator.py` knows that FastAPI exists. Adding a CLI or a Lambda
+handler later means re-using `Pure` against a different `HTTP` layer,
+not rewriting either.
+
 ## 9. Versioning, releases, supply chain
 
 Mirrors better-subnet-calculator:

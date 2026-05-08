@@ -32,6 +32,10 @@ updates:
         patterns: [docker/*]
       gittools:
         patterns: [gittools/*]
+      codeql:
+        patterns: [github/codeql-action]
+      step-security:
+        patterns: [step-security/*]
 
   - package-ecosystem: docker
     directory: /

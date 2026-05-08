@@ -180,3 +180,80 @@ class TestSummarize:
         assert IPv4Network("10.0.0.0/24") in result
         assert IPv4Network("10.2.0.0/24") in result
         assert len(result) == 2
+
+
+class TestIsPrivateClassification:
+    """Wrapper must agree with stdlib IPv4Network.is_private."""
+
+    @pytest.mark.parametrize(
+        "cidr",
+        [
+            "10.0.0.0/8",
+            "10.5.0.0/16",
+            "172.16.0.0/12",
+            "172.20.0.0/16",
+            "192.168.0.0/16",
+            "192.168.1.0/24",
+            "169.254.0.0/16",
+            "127.0.0.0/8",
+            "127.0.0.1/32",
+            "224.0.0.0/4",
+            "255.255.255.255/32",
+            "192.0.2.0/24",
+            "198.51.100.0/24",
+            "203.0.113.0/24",
+            "198.18.0.0/15",
+            "0.0.0.0/8",
+            "8.8.8.0/24",
+            "1.1.1.1/32",
+        ],
+    )
+    def test_matches_stdlib(self, cidr: str) -> None:
+        net = IPv4Network(cidr)
+        info = subnet_info(net)
+        assert info["is_private"] == net.is_private
+
+
+class TestSubdivideBoundary:
+    def test_zero_to_one_split(self):
+        children = subdivide(IPv4Network("0.0.0.0/0"), target_prefix=1)
+        assert children == [
+            IPv4Network("0.0.0.0/1"),
+            IPv4Network("128.0.0.0/1"),
+        ]
+
+
+class TestFreeBlocksExtra:
+    def test_allocated_equal_parent_returns_empty(self):
+        parent = IPv4Network("10.0.0.0/24")
+        assert free_blocks(parent, [parent]) == []
+
+    def test_allocations_leave_single_host(self):
+        parent = IPv4Network("10.0.0.0/30")
+        allocated = [
+            IPv4Network("10.0.0.0/32"),
+            IPv4Network("10.0.0.1/32"),
+            IPv4Network("10.0.0.2/32"),
+        ]
+        result = free_blocks(parent, allocated)
+        assert IPv4Network("10.0.0.3/32") in result
+
+    def test_stress_50_random_slash_24s(self):
+        import random
+
+        rng = random.Random(42)
+        parent = IPv4Network("10.0.0.0/16")
+        all_24s = list(parent.subnets(new_prefix=24))
+        chosen = rng.sample(all_24s, k=50)
+        chosen.sort(key=lambda n: int(n.network_address))
+
+        free = free_blocks(parent, chosen)
+
+        all_blocks = sorted(
+            [*chosen, *free], key=lambda n: int(n.network_address)
+        )
+        total = sum(b.num_addresses for b in all_blocks)
+        assert total == parent.num_addresses
+        for i in range(len(all_blocks) - 1):
+            a, b = all_blocks[i], all_blocks[i + 1]
+            assert int(a.broadcast_address) + 1 == int(b.network_address)

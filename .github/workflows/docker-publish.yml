@@ -145,7 +145,7 @@ jobs:
         run: cosign sign --yes "${REPO}@${DIGEST}"
 
       - name: Generate build attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build.outputs.digest }}

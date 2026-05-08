@@ -31,13 +31,14 @@ Container images are:
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 
-- Accompanied by a SLSA v1 build provenance attestation, viewable on
-  the package page or via:
+- Embedded with SLSA build provenance via `docker buildx`'s
+  `provenance: true`. Inspect with `docker buildx imagetools inspect`.
+- Scanned with Trivy on every push to `main`. The publish job fails on
+  any critical or high severity finding with a fix available, so
+  vulnerable images never reach `latest`.
 
-  ```sh
-  gh attestation verify oci://ghcr.io/blackout-industries/better-subnet-calculator-api:latest \
-    -R Blackout-Industries/better-subnet-calculator-api
-  ```
-
-- Scanned with Trivy on every push to `main`. Results are visible under
-  the Security tab.
+GitHub Advanced Security features (CodeQL, Dependency Review, build
+attestations published via the GitHub API, the Security tab SARIF feed,
+OpenSSF Scorecard) are not enabled while this repository is private on
+a free plan. They will start working automatically if the repository
+becomes public or the organization upgrades.

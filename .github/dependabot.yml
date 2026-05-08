@@ -32,8 +32,6 @@ updates:
         patterns: [docker/*]
       gittools:
         patterns: [gittools/*]
-      codeql:
-        patterns: [github/codeql-action]
 
   - package-ecosystem: docker
     directory: /
